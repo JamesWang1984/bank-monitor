@@ -20,7 +20,7 @@
   h1 small { display: block; font-size: 11px; color: var(--sub); font-weight: 400; margin-top: 3px; }
   #refresh { border: 1px solid var(--line); background: var(--card); color: var(--text); border-radius: 10px; padding: 8px 14px; font-size: 14px; }
   #refresh:active { transform: scale(.96); }
-  .card { background: var(--card); border-radius: 16px; padding: 16px; margin-bottom: 12px; border: 1px solid var(--line); }
+  .card { background: var(--card); border-radius: 16px; padding: 16px; margin-bottom: 12px; border: 1px solid var(--line); border-left: 4px solid var(--accent, #78909c); }
   .card-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; }
   .card-head .name { font-size: 17px; font-weight: 700; }
   .card-head .price { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
@@ -30,6 +30,14 @@
   .metric { background: var(--bg); border-radius: 10px; padding: 10px 6px; text-align: center; }
   .metric .v { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
   .metric .k { font-size: 11px; color: var(--sub); margin-top: 3px; }
+  /* 建仓接近度进度条 */
+  .prox { margin-bottom: 12px; }
+  .prox-head { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; margin-bottom: 5px; }
+  .prox-head .word { font-weight: 700; font-size: 13px; }
+  .prox-head .dist { color: var(--sub); }
+  .prox-track { height: 12px; background: var(--bg); border-radius: 7px; overflow: hidden; position: relative; }
+  .prox-fill { height: 100%; border-radius: 7px; transition: width .6s ease; }
+  .prox-fill::after { content: ""; position: absolute; top: 0; bottom: 0; width: 2px; background: rgba(255,255,255,.85); left: calc(100% - 2px); }
   .tier { border-radius: 10px; padding: 9px 12px; font-size: 14px; font-weight: 600; text-align: center; margin-bottom: 10px; }
   .t0 { background: #eceff1; color: #546e7a; }
   .t1 { background: #e3f2fd; color: #1565c0; }
@@ -44,6 +52,8 @@
   .refs { display: flex; gap: 6px; font-size: 11.5px; color: var(--sub); }
   .refs span { flex: 1; text-align: center; background: var(--bg); border-radius: 8px; padding: 7px 2px; }
   .refs b { color: var(--text); font-variant-numeric: tabular-nums; }
+  .legend { display: flex; gap: 6px; margin: 2px 2px 14px; font-size: 11px; color: var(--sub); }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 4px; vertical-align: -1px; }
   footer { text-align: center; font-size: 11px; color: var(--sub); line-height: 1.8; margin-top: 16px; }
   .err { text-align: center; color: #c62828; padding: 30px; font-size: 14px; }
 </style>
@@ -53,6 +63,12 @@
   <h1>银行股买点看板<small id="ts">加载中…</small></h1>
   <button id="refresh" onclick="load()">刷新</button>
 </header>
+<div class="legend">
+  <span><i style="background:#78909c"></i>远离买点</span>
+  <span><i style="background:#f9a825"></i>中性</span>
+  <span><i style="background:#ef6c00"></i>接近</span>
+  <span><i style="background:#c62828"></i>临近/触发</span>
+</div>
 <div id="app"></div>
 <footer>
   档位: ★建仓 股息率≥5% ｜ ★★加仓 ≥5.5%或利差≥3.5pp ｜ ★★★金坑 ≥6%<br>
@@ -69,6 +85,27 @@ const BANKS = [
 const fmt = (x, d = 2) => (x == null || isNaN(x)) ? "--" : x.toFixed(d);
 const pct = x => (x >= 0 ? "+" : "") + (x * 100).toFixed(1) + "%";
 
+/* 接近度: 返回进度0-1、颜色、状态词、距一档跌幅 */
+function proxInfo(dv, p, dps) {
+  let tier = 0;
+  if (dv >= 0.06) tier = 3;
+  else if (dv >= 0.055 || (dv - Y10) >= 0.035) tier = 2;
+  else if (dv >= 0.05) tier = 1;
+  if (tier > 0) {
+    const c = tier === 3 ? "#c62828" : tier === 2 ? "#ef6c00" : "#f9a825";
+    const w = tier === 3 ? "★★★ 金坑区" : tier === 2 ? "★★ 加仓区" : "★ 建仓区";
+    return { tier, dist: 0, prog: 1, color: c, word: w };
+  }
+  const dist = dps / 0.05 / p - 1;          // 达到5%股息率还需下跌
+  const prog = Math.max(0, Math.min(1, 1 - dist / 0.30));
+  let color, word;
+  if (prog >= 0.9)       { color = "#c62828"; word = "临近建仓"; }
+  else if (prog >= 0.7)  { color = "#ef6c00"; word = "接近买点"; }
+  else if (prog >= 0.4)  { color = "#f9a825"; word = "中性"; }
+  else                   { color = "#78909c"; word = "远离买点"; }
+  return { tier: 0, dist, prog, color, word };
+}
+
 async function load() {
   const app = document.getElementById("app");
   document.getElementById("ts").textContent = "加载中…";
@@ -84,23 +121,37 @@ async function load() {
       const dv = p ? b.dps / p : null;
       const pb = p ? p / b.bps : null;
       const sp = dv != null ? dv - Y10 : null;
-      let tier = 0, tag = "观望", cls = "t0";
-      if (dv >= 0.06) { tier = 3; tag = "★★★ 三档·历史金坑区，可重仓"; cls = "t3"; }
-      else if (dv >= 0.055 || sp >= 0.035) { tier = 2; tag = "★★ 二档·加仓区"; cls = "t2"; }
-      else if (dv >= 0.05) { tier = 1; tag = "★ 一档·建仓区"; cls = "t1"; }
-      else if (pb >= b.pbWarn) { tag = "▲ PB偏高(近5年95分位以上)，不宜追高"; cls = "warn"; }
-      const dist = (dv && dv < 0.05) ? (b.dps / 0.05 / p - 1) : null;
-      return `<div class="card">
+      const px = (dv != null && p) ? proxInfo(dv, p, b.dps) : null;
+      let tierTag = "", tierCls = "t0";
+      if (px && px.tier > 0) {
+        tierCls = "t" + px.tier;
+        tierTag = px.tier === 3 ? "★★★ 三档·历史金坑区，可重仓" : px.tier === 2 ? "★★ 二档·加仓区" : "★ 一档·建仓区";
+      } else if (pb != null && pb >= b.pbWarn) {
+        tierCls = "warn";
+        tierTag = "▲ PB偏高(近5年95分位以上)，不宜追高";
+      } else {
+        tierTag = "观望";
+      }
+      return `<div class="card" style="--accent:${px ? px.color : "#78909c"}">
         <div class="card-head">
           <span class="name">${b.name}</span>
           <span><span class="price">${fmt(p)}</span><span class="chg ${chg >= 0 ? "up" : "down"}">${pct(chg)}</span></span>
         </div>
         <div class="metrics">
-          <div class="metric"><div class="v">${dv == null ? "--" : (dv*100).toFixed(2) + "%"}</div><div class="k">股息率TTM</div></div>
+          <div class="metric"><div class="v" style="color:${px ? px.color : "inherit"}">${dv == null ? "--" : (dv*100).toFixed(2) + "%"}</div><div class="k">股息率TTM</div></div>
           <div class="metric"><div class="v">${fmt(pb)}</div><div class="k">市净率PB</div></div>
           <div class="metric"><div class="v">${sp == null ? "--" : (sp*100).toFixed(2) + "pp"}</div><div class="k">股债利差</div></div>
         </div>
-        <div class="tier ${cls}">${tag}${dist != null ? "（距一档还需跌 " + (dist*100).toFixed(0) + "%）" : ""}</div>
+        <div class="prox">
+          <div class="prox-head">
+            <span class="word" style="color:${px ? px.color : "inherit"}">${px ? px.word : "--"}</span>
+            <span class="dist">${px ? (px.tier > 0 ? "已进入买点区" : "距一档建仓(股息率5%)还需跌 " + (px.dist*100).toFixed(1) + "%") : ""}</span>
+          </div>
+          <div class="prox-track">
+            <div class="prox-fill" style="width:${px ? (px.prog*100).toFixed(0) : 0}%; background:${px ? px.color : "#78909c"}"></div>
+          </div>
+        </div>
+        <div class="tier ${tierCls}">${tierTag}</div>
         <div class="refs">
           <span>建仓 <b>${fmt(b.dps/0.05)}</b></span>
           <span>加仓 <b>${fmt(b.dps/0.055)}</b></span>
