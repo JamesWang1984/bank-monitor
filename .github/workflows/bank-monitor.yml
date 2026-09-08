@@ -6,9 +6,12 @@ on:
   schedule:
     - cron: "5 7 * * 1-5"
   workflow_dispatch: {}   # 手动触发按钮, 用于测试
+  push:
+    branches: [main]      # 文件更新时重新部署看板
 
 jobs:
   monitor:
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -26,3 +29,27 @@ jobs:
           SERVERCHAN_KEY: ${{ secrets.SERVERCHAN_KEY }}
           # PUSH_MODE: alert_only=仅触发档位时推送 / always=每天收盘推送汇总(默认alert_only)
           PUSH_MODE: ${{ vars.PUSH_MODE || 'alert_only' }}
+
+  # 实时看板部署到 GitHub Pages: https://jameswang1984.github.io/bank-monitor/
+  deploy-pages:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true   # 首次运行时自动启用Pages
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.'
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
