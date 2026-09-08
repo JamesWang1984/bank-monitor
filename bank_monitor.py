@@ -100,16 +100,29 @@ def get_y10():
 
 
 def push_wechat(title, desp):
+    """推送通知: 优先 Bark(iOS, 免费无限量), 备选 Server酱"""
+    bark_key = os.environ.get("BARK_KEY", "")
+    if bark_key:
+        try:  # Bark: 苹果APNs原生推送
+            server = os.environ.get("BARK_SERVER", "https://api.day.app").rstrip("/")
+            data = json.dumps({"title": title, "body": desp, "group": "银行股监控",
+                               "sound": "minuet", "url": "https://github.com/JamesWang1984/bank-monitor/actions"}).encode()
+            req = urllib.request.Request(f"{server}/{bark_key}", data=data,
+                                         headers={"Content-Type": "application/json; charset=utf-8"})
+            return urllib.request.urlopen(req, timeout=10).status == 200
+        except Exception as e:
+            print("Bark推送失败:", e)
+            return False
     key = os.environ.get("SERVERCHAN_KEY", SERVERCHAN_KEY)
     if not key:
         return False
-    try:
+    try:  # Server酱(每月限5条, 备用)
         data = json.dumps({"title": title, "desp": desp}).encode()
         req = urllib.request.Request(f"https://sctapi.ftqq.com/{key}.send", data=data,
                                      headers={"Content-Type": "application/json"})
         return urllib.request.urlopen(req, timeout=10).status == 200
     except Exception as e:
-        print("推送失败:", e)
+        print("Server酱推送失败:", e)
         return False
 
 
