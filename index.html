@@ -96,14 +96,14 @@ function proxInfo(dv, p, dps) {
     const w = tier === 3 ? "★★★ 金坑区" : tier === 2 ? "★★ 加仓区" : "★ 建仓区";
     return { tier, dist: 0, prog: 1, color: c, word: w };
   }
-  const dist = dps / 0.05 / p - 1;          // 达到5%股息率还需下跌
-  const prog = Math.max(0, Math.min(1, 1 - dist / 0.30));
+  const need = 1 - dps / 0.05 / p;          // 达到5%股息率还需下跌的比例(正数)
+  const prog = Math.max(0, Math.min(1, 1 - need / 0.30));
   let color, word;
   if (prog >= 0.9)       { color = "#c62828"; word = "临近建仓"; }
   else if (prog >= 0.7)  { color = "#ef6c00"; word = "接近买点"; }
   else if (prog >= 0.4)  { color = "#f9a825"; word = "中性"; }
   else                   { color = "#78909c"; word = "远离买点"; }
-  return { tier: 0, dist, prog, color, word };
+  return { tier: 0, dist: need, prog, color, word };
 }
 
 async function load() {
