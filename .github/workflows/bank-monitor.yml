@@ -20,6 +20,9 @@ jobs:
       - name: Run bank monitor
         run: python bank_monitor.py
         env:
+          # Bark推送(iOS, 免费无限量): App Store安装Bark后复制key填入Secrets
+          BARK_KEY: ${{ secrets.BARK_KEY }}
+          # 备选: Server酱(每月限5条), 二者填一个即可, Bark优先
           SERVERCHAN_KEY: ${{ secrets.SERVERCHAN_KEY }}
           # PUSH_MODE: alert_only=仅触发档位时推送 / always=每天收盘推送汇总(默认alert_only)
           PUSH_MODE: ${{ vars.PUSH_MODE || 'alert_only' }}
