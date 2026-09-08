@@ -1,0 +1,25 @@
+name: bank-monitor
+
+# 定时监控: UTC 07:05 = 北京时间 15:05 (A股收盘后5分钟), 仅周一至周五
+# 节假日由脚本内行情时间戳自动识别并跳过
+on:
+  schedule:
+    - cron: "5 7 * * 1-5"
+  workflow_dispatch: {}   # 手动触发按钮, 用于测试
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run bank monitor
+        run: python bank_monitor.py
+        env:
+          SERVERCHAN_KEY: ${{ secrets.SERVERCHAN_KEY }}
+          # PUSH_MODE: alert_only=仅触发档位时推送 / always=每天收盘推送汇总(默认alert_only)
+          PUSH_MODE: ${{ vars.PUSH_MODE || 'alert_only' }}
