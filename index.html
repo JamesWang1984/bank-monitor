@@ -15,12 +15,18 @@
   }
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: var(--bg); color: var(--text); padding: 12px 12px 28px; max-width: 520px; margin: 0 auto; }
-  header { display: flex; justify-content: space-between; align-items: center; padding: 8px 4px 14px; }
+  header { display: flex; justify-content: space-between; align-items: center; padding: 8px 4px 12px; }
   h1 { font-size: 19px; font-weight: 700; }
   h1 small { display: block; font-size: 11px; color: var(--sub); font-weight: 400; margin-top: 3px; }
   #refresh { border: 1px solid var(--line); background: var(--card); color: var(--text); border-radius: 10px; padding: 8px 14px; font-size: 14px; }
   #refresh:active { transform: scale(.96); }
-  .card { background: var(--card); border-radius: 16px; padding: 16px; margin-bottom: 12px; border: 1px solid var(--line); border-left: 4px solid var(--accent, #78909c); }
+  /* 顶部说明区: 颜色图例 + 档位定义 */
+  .info { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-bottom: 12px; font-size: 11.5px; color: var(--sub); line-height: 1.9; }
+  .info .row { display: flex; flex-wrap: wrap; gap: 4px 10px; }
+  .info i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 4px; vertical-align: -1px; }
+  .info .tiers { border-top: 1px dashed var(--line); margin-top: 6px; padding-top: 6px; }
+  .info .tiers b { color: var(--text); }
+  .card { background: var(--card); border-radius: 16px; padding: 16px; margin-bottom: 12px; border: 1px solid var(--line); }
   .card-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; }
   .card-head .name { font-size: 17px; font-weight: 700; }
   .card-head .price { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
@@ -30,6 +36,7 @@
   .metric { background: var(--bg); border-radius: 10px; padding: 10px 6px; text-align: center; }
   .metric .v { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
   .metric .k { font-size: 11px; color: var(--sub); margin-top: 3px; }
+  .metric .k b { font-weight: 600; }
   /* 建仓接近度进度条 */
   .prox { margin-bottom: 12px; }
   .prox-head { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; margin-bottom: 5px; }
@@ -52,8 +59,6 @@
   .refs { display: flex; gap: 6px; font-size: 11.5px; color: var(--sub); }
   .refs span { flex: 1; text-align: center; background: var(--bg); border-radius: 8px; padding: 7px 2px; }
   .refs b { color: var(--text); font-variant-numeric: tabular-nums; }
-  .legend { display: flex; gap: 6px; margin: 2px 2px 14px; font-size: 11px; color: var(--sub); }
-  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 4px; vertical-align: -1px; }
   footer { text-align: center; font-size: 11px; color: var(--sub); line-height: 1.8; margin-top: 16px; }
   .err { text-align: center; color: #c62828; padding: 30px; font-size: 14px; }
 </style>
@@ -63,28 +68,56 @@
   <h1>银行股买点看板<small id="ts">加载中…</small></h1>
   <button id="refresh" onclick="load()">刷新</button>
 </header>
-<div class="legend">
-  <span><i style="background:#78909c"></i>远离买点</span>
-  <span><i style="background:#f9a825"></i>中性</span>
-  <span><i style="background:#ef6c00"></i>接近</span>
-  <span><i style="background:#c62828"></i>临近/触发</span>
+
+<div class="info">
+  <div class="row">
+    <span><i style="background:#78909c"></i>远离买点</span>
+    <span><i style="background:#f9a825"></i>中性</span>
+    <span><i style="background:#ef6c00"></i>接近</span>
+    <span><i style="background:#c62828"></i>临近/触发</span>
+  </div>
+  <div class="row">
+    <span>PB: <i style="background:#1565c0"></i>低估 <i style="background:#78909c"></i>中位 <i style="background:#f9a825"></i>偏高 <i style="background:#6a1b9a"></i>过高</span>
+    <span>利差: <i style="background:#f9a825"></i>≥3.0pp <i style="background:#ef6c00"></i>≥3.5pp</span>
+  </div>
+  <div class="row tiers">
+    <span><b>★建仓</b> 股息率≥5%</span>
+    <span><b>★★加仓</b> ≥5.5%或利差≥3.5pp</span>
+    <span><b>★★★金坑</b> ≥6%</span>
+  </div>
 </div>
+
 <div id="app"></div>
 <footer>
-  档位: ★建仓 股息率≥5% ｜ ★★加仓 ≥5.5%或利差≥3.5pp ｜ ★★★金坑 ≥6%<br>
   数据: 东方财富实时行情(约15秒延迟) · 10Y国债取1.68%(手动维护)<br>
-  每股股息/净资产更新于2026-09 · 仅作参考, 非投资建议
+  PB分位基准: 近5年 · 每股股息/净资产更新于2026-09 · 仅作参考, 非投资建议
 </footer>
 <script>
 const Y10 = 0.0168;
 const BANKS = [
-  { code: "601398", name: "工商银行", dps: 0.3103, bps: 11.117, pbWarn: 0.74 },
-  { code: "601328", name: "交通银行", dps: 0.3247, bps: 13.216, pbWarn: 0.61 },
-  { code: "600919", name: "江苏银行", dps: 0.5641, bps: 14.787, pbWarn: 0.84 },
+  // pbA: [近5年p25, p75, p95] 用于PB着色
+  { code: "601398", name: "工商银行", dps: 0.3103, bps: 11.117, pbWarn: 0.74, pbA: [0.528, 0.676, 0.737] },
+  { code: "601328", name: "交通银行", dps: 0.3247, bps: 13.216, pbWarn: 0.61, pbA: [0.458, 0.563, 0.613] },
+  { code: "600919", name: "江苏银行", dps: 0.5641, bps: 14.787, pbWarn: 0.84, pbA: [0.644, 0.755, 0.838] },
 ];
 const fmt = (x, d = 2) => (x == null || isNaN(x)) ? "--" : x.toFixed(d);
 const pct = x => (x >= 0 ? "+" : "") + (x * 100).toFixed(1) + "%";
 
+/* PB着色: 按近5年分位 */
+function pbInfo(pb, a) {
+  if (pb == null) return { color: "inherit", word: "" };
+  if (pb >= a[2]) return { color: "#6a1b9a", word: "过高" };      // ≥p95 追高警示
+  if (pb >= a[1]) return { color: "#f9a825", word: "偏高" };      // p75-p95
+  if (pb <= a[0]) return { color: "#1565c0", word: "低估" };      // ≤p25
+  return { color: "inherit", word: "中位" };
+}
+/* 利差着色 */
+function spInfo(sp) {
+  if (sp == null) return { color: "inherit", word: "" };
+  if (sp >= 0.035) return { color: "#ef6c00", word: "达二档线" };  // ≥3.5pp 辅助触发
+  if (sp >= 0.030) return { color: "#f9a825", word: "接近" };     // 3.0-3.5pp
+  return { color: "inherit", word: "常规" };
+}
 /* 接近度: 返回进度0-1、颜色、状态词、距一档跌幅 */
 function proxInfo(dv, p, dps) {
   let tier = 0;
@@ -122,6 +155,8 @@ async function load() {
       const pb = p ? p / b.bps : null;
       const sp = dv != null ? dv - Y10 : null;
       const px = (dv != null && p) ? proxInfo(dv, p, b.dps) : null;
+      const pbi = pbInfo(pb, b.pbA);
+      const spi = spInfo(sp);
       let tierTag = "", tierCls = "t0";
       if (px && px.tier > 0) {
         tierCls = "t" + px.tier;
@@ -132,15 +167,15 @@ async function load() {
       } else {
         tierTag = "观望";
       }
-      return `<div class="card" style="--accent:${px ? px.color : "#78909c"}">
+      return `<div class="card">
         <div class="card-head">
           <span class="name">${b.name}</span>
           <span><span class="price">${fmt(p)}</span><span class="chg ${chg >= 0 ? "up" : "down"}">${pct(chg)}</span></span>
         </div>
         <div class="metrics">
-          <div class="metric"><div class="v" style="color:${px ? px.color : "inherit"}">${dv == null ? "--" : (dv*100).toFixed(2) + "%"}</div><div class="k">股息率TTM</div></div>
-          <div class="metric"><div class="v">${fmt(pb)}</div><div class="k">市净率PB</div></div>
-          <div class="metric"><div class="v">${sp == null ? "--" : (sp*100).toFixed(2) + "pp"}</div><div class="k">股债利差</div></div>
+          <div class="metric"><div class="v" style="color:${px ? px.color : "inherit"}">${dv == null ? "--" : (dv*100).toFixed(2) + "%"}</div><div class="k">股息率TTM · <b style="color:${px ? px.color : "inherit"}">${px ? px.word : ""}</b></div></div>
+          <div class="metric"><div class="v" style="color:${pbi.color}">${fmt(pb)}</div><div class="k">PB(近5年) · <b style="color:${pbi.color}">${pbi.word}</b></div></div>
+          <div class="metric"><div class="v" style="color:${spi.color}">${sp == null ? "--" : (sp*100).toFixed(2) + "pp"}</div><div class="k">股债利差 · <b style="color:${spi.color}">${spi.word}</b></div></div>
         </div>
         <div class="prox">
           <div class="prox-head">
