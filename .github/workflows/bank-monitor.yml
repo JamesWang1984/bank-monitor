@@ -3,6 +3,7 @@ name: bank-monitor
 # 定时监控(北京时间): 盘中每小时 + 收盘后, 仅周一至周五
 # 节假日由脚本内行情时间戳自动识别并跳过
 # 档位跃迁才推送, 档位状态存 monitor_state.json 并提交回仓库供下次运行对比
+# 保活: 仓库超过25天无commit时自动空提交一次, 防止GitHub禁用60天无活动仓库的定时任务
 on:
   schedule:
     - cron: "35 1,2,5,6 * * 1-5"   # 盘中: 北京 09:35 / 10:35 / 13:35 / 14:35
@@ -37,16 +38,24 @@ jobs:
           # 备选: Server酱(每月限5条), 二者填一个即可, Bark优先
           SERVERCHAN_KEY: ${{ secrets.SERVERCHAN_KEY }}
 
-      - name: Commit monitor state   # 档位变化时状态文件已更新, 提交回仓库; [skip ci]避免再触发部署
+      - name: Commit monitor state / keep-alive
+        # 档位变化→提交状态文件; 仓库超过25天无commit→空提交保活(防60天无活动被GitHub禁用定时任务)
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add monitor_state.json 2>/dev/null || true
-          if ! git diff --cached --quiet; then
+          if git diff --cached --quiet; then
+            LAST=$(git log -1 --format=%ct)
+            if [ $(( $(date +%s) - LAST )) -lt 2160000 ]; then   # 25天=2160000秒
+              echo "状态无变化且仓库25天内有活动, 无需提交"
+              exit 0
+            fi
+            git commit --allow-empty -m "chore: monthly keep-alive [skip ci]"
+          else
             git commit -m "chore: update monitor state [skip ci]"
-            git pull --rebase origin main
-            git push
           fi
+          git pull --rebase origin main
+          git push
 
   # 实时看板部署到 GitHub Pages: https://jameswang1984.github.io/bank-monitor/
   deploy-pages:
