@@ -1,10 +1,13 @@
 name: bank-monitor
 
-# 定时监控: UTC 07:05 = 北京时间 15:05 (A股收盘后5分钟), 仅周一至周五
+# 定时监控(北京时间): 盘中每小时 + 收盘后, 仅周一至周五
 # 节假日由脚本内行情时间戳自动识别并跳过
+# 档位跃迁才推送, 档位状态存 monitor_state.json 并提交回仓库供下次运行对比
 on:
   schedule:
-    - cron: "5 7 * * 1-5"
+    - cron: "35 1,2,5,6 * * 1-5"   # 盘中: 北京 09:35 / 10:35 / 13:35 / 14:35
+    - cron: "25 3 * * 1-5"         # 午盘尾: 北京 11:25
+    - cron: "5 7 * * 1-5"          # 收盘后: 北京 15:05
   workflow_dispatch: {}   # 手动触发按钮, 用于测试
   push:
     branches: [main]      # 文件更新时重新部署看板
@@ -13,6 +16,10 @@ jobs:
   monitor:
     if: github.event_name != 'push'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write     # 提交 monitor_state.json 需要
+    concurrency:
+      group: bank-monitor-state   # 串行化运行, 避免状态文件提交冲突
     steps:
       - uses: actions/checkout@v4
 
@@ -23,12 +30,23 @@ jobs:
       - name: Run bank monitor
         run: python bank_monitor.py
         env:
+          # 企业微信群机器人 webhook(优先): 群设置→添加机器人→复制webhook地址填入Secrets
+          WECOM_WEBHOOK: ${{ secrets.WECOM_WEBHOOK }}
           # Bark推送(iOS, 免费无限量): App Store安装Bark后复制key填入Secrets
           BARK_KEY: ${{ secrets.BARK_KEY }}
           # 备选: Server酱(每月限5条), 二者填一个即可, Bark优先
           SERVERCHAN_KEY: ${{ secrets.SERVERCHAN_KEY }}
-          # PUSH_MODE: alert_only=仅触发档位时推送 / always=每天收盘推送汇总(默认alert_only)
-          PUSH_MODE: ${{ vars.PUSH_MODE || 'alert_only' }}
+
+      - name: Commit monitor state   # 档位变化时状态文件已更新, 提交回仓库; [skip ci]避免再触发部署
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add monitor_state.json 2>/dev/null || true
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: update monitor state [skip ci]"
+            git pull --rebase origin main
+            git push
+          fi
 
   # 实时看板部署到 GitHub Pages: https://jameswang1984.github.io/bank-monitor/
   deploy-pages:
